@@ -360,6 +360,8 @@ class Dropzone extends Em
         @files.queue.push file
         @processQueue()
 
+
+
   createThumbnail: (file) ->
 
     fileReader = new FileReader
@@ -368,8 +370,8 @@ class Dropzone extends Em
       img = new Image
 
       img.onload = =>
-        canvas = document.createElement("canvas")
-        ctx = canvas.getContext("2d")
+        canvas = document.createElement "canvas"
+        ctx = canvas.getContext "2d"
         srcX = 0
         srcY = 0
         srcWidth = img.width
@@ -396,12 +398,36 @@ class Dropzone extends Em
             srcWidth = img.width
             srcHeight = srcWidth / trgRatio
 
+        trgHeight = trgHeight
 
         srcX = (img.width - srcWidth) / 2
         srcY = (img.height - srcHeight) / 2
         trgY = (canvas.height - trgHeight) / 2
         trgX = (canvas.width - trgWidth) / 2
         ctx.drawImage img, srcX, srcY, srcWidth, srcHeight, trgX, trgY, trgWidth, trgHeight
+
+        # Now fix the iOS bug where some images get squashed.
+        # Now scan all lines from the bottom, and which part is transparent.
+        # I got the idea from
+        # https://github.com/stomita/ios-imagefile-megapixel/blob/master/src/megapix-image.js
+        # 
+        # This implementation will stretch images that have a transparent bar
+        # at the bottom, but I guesst it's better than nothing.
+        
+        data = ctx.getImageData(0, 0, 1, trgHeight).data
+        cursorY = trgHeight - 1 # Lines start at 0
+        while cursorY > 0
+         # Canvas data is weird... it's the rgba data of every pixel stuffed in an array
+         alpha = data[cursorY * 4 + 3]
+         break if alpha
+         cursorY--
+        sqashRatio = (cursorY + 1) / trgHeight
+
+        if sqashRatio isnt 1
+          # Well, iOS is weird, so lets draw that again, shall we?
+          ctx.drawImage img, srcX, srcY, srcWidth, srcHeight, trgX, trgY, trgWidth, trgHeight / sqashRatio
+
+
         thumbnail = canvas.toDataURL("image/png")
 
         @emit "thumbnail", file, thumbnail
